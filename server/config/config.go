@@ -1,0 +1,164 @@
+package config
+
+import (
+    "Spark/utils"
+    "bytes"
+    "encoding/hex"
+    "flag"
+    "github.com/kataras/golog"
+    "os"
+    "strings"
+)
+
+type config struct {
+	Listen    string            `json:"listen"`
+	Salt      string            `json:"salt"`
+	Auth      map[string]string `json:"auth"`
+	Log       *log              `json:"log"`
+	SaltBytes []byte            `json:"-"`
+}
+type log struct {
+	Level string `json:"level"`
+	Path  string `json:"path"`
+	Days  uint   `json:"days"`
+}
+
+// Commit is hash of this commit, for auto upgrade.
+var Commit = ``
+var Config config
+var BuiltPath = `./built/%v_%v`
+
+func init() {
+	golog.SetTimeFormat(`2006/01/02 15:04:05`)
+
+	var (
+		err                      error
+		configData               []byte
+		configPath, listen, salt string
+		username, password       string
+		logLevel, logPath        string
+		logDays                  uint
+	)
+	flag.StringVar(&configPath, `config`, `config.json`, `config file path, default: config.json`)
+	flag.StringVar(&listen, `listen`, `:8000`, `required, listen address, default: :8000`)
+	flag.StringVar(&salt, `salt`, ``, `required, salt of server`)
+	flag.StringVar(&username, `username`, ``, `username of web interface`)
+	flag.StringVar(&password, `password`, ``, `password of web interface`)
+	flag.StringVar(&logLevel, `log-level`, `info`, `log level, default: info`)
+	flag.StringVar(&logPath, `log-path`, `./logs`, `log file path, default: ./logs`)
+	flag.UintVar(&logDays, `log-days`, 7, `max days of logs, default: 7`)
+	flag.Parse()
+
+    if len(configPath) > 0 {
+        configData, err = os.ReadFile(configPath)
+        if err != nil {
+            configData, err = os.ReadFile(`Config.json`)
+            if err != nil {
+                // Generate a default configuration if no file is present.
+                defSalt := os.Getenv("SPARK_SALT")
+                if len(strings.TrimSpace(defSalt)) == 0 {
+                    defSalt = hex.EncodeToString(utils.GetUUID())
+                }
+                defUser := strings.TrimSpace(os.Getenv("SPARK_AUTH_USER"))
+                defPass := strings.TrimSpace(os.Getenv("SPARK_AUTH_PASS"))
+                auth := map[string]string{}
+                if len(defUser) > 0 && len(defPass) > 0 {
+                    auth[defUser] = defPass
+                }
+                Config = config{
+                    Listen: `:8000`,
+                    Salt:   defSalt,
+                    Auth:   auth,
+                    Log: &log{
+                        Level: `info`,
+                        Path:  `./logs`,
+                        Days:  7,
+                    },
+                }
+                // Best-effort write to config.json so users can edit later.
+                _ = os.WriteFile("config.json", []byte("{\"listen\":\":8000\",\"salt\":\""+Config.Salt+"\",\"auth\":{},\"log\":{\"level\":\"info\",\"path\":\"./logs\",\"days\":7}}"), 0644)
+            } else {
+                // Parsed from fallback Config.json
+                _ = utils.JSON.Unmarshal(configData, &Config)
+            }
+        } else {
+            err = utils.JSON.Unmarshal(configData, &Config)
+            if err != nil {
+                fatal(map[string]any{
+                    `event`:  `CONFIG_PARSE`,
+                    `status`: `fail`,
+                    `msg`:    err.Error(),
+                })
+                return
+            }
+        }
+        if Config.Log == nil {
+            Config.Log = &log{
+                Level: `info`,
+                Path:  `./logs`,
+                Days:  7,
+            }
+        }
+    } else {
+		Config = config{
+			Listen: listen,
+			Salt:   salt,
+			Auth: map[string]string{
+				username: password,
+			},
+			Log: &log{
+				Level: logLevel,
+				Path:  logPath,
+				Days:  logDays,
+			},
+		}
+	}
+
+    // Allow runtime overrides via environment variables
+    if v := strings.TrimSpace(os.Getenv("SPARK_SALT")); len(v) > 0 {
+        Config.Salt = v
+    }
+    if u := strings.TrimSpace(os.Getenv("SPARK_AUTH_USER")); len(u) > 0 {
+        if p := strings.TrimSpace(os.Getenv("SPARK_AUTH_PASS")); len(p) > 0 {
+            if Config.Auth == nil {
+                Config.Auth = map[string]string{}
+            }
+            Config.Auth[u] = p
+        }
+    }
+    if lvl := strings.TrimSpace(os.Getenv("SPARK_LOG_LEVEL")); len(lvl) > 0 {
+        if Config.Log == nil {
+            Config.Log = &log{}
+        }
+        Config.Log.Level = lvl
+    }
+
+    if len(Config.Salt) > 24 {
+		fatal(map[string]any{
+			`event`:  `CONFIG_PARSE`,
+			`status`: `fail`,
+			`msg`:    `length of salt should less than 24`,
+		})
+		return
+	}
+	Config.SaltBytes = []byte(Config.Salt)
+	Config.SaltBytes = append(Config.SaltBytes, bytes.Repeat([]byte{25}, 24)...)
+	Config.SaltBytes = Config.SaltBytes[:24]
+
+    golog.SetLevel(utils.If(len(Config.Log.Level) == 0, `info`, Config.Log.Level))
+
+    // If PORT env is provided (e.g., on platforms like Hugging Face Spaces),
+    // force the server to listen on that port. This takes precedence over file/flag config.
+    if p := os.Getenv("PORT"); len(strings.TrimSpace(p)) > 0 {
+        if !strings.HasPrefix(p, ":") {
+            Config.Listen = ":" + p
+        } else {
+            Config.Listen = p
+        }
+    }
+}
+
+func fatal(args map[string]any) {
+	output, _ := utils.JSON.MarshalToString(args)
+	golog.Fatal(output)
+}
