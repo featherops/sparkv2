@@ -1,11 +1,12 @@
 package config
 
 import (
-	"Spark/utils"
-	"bytes"
-	"flag"
-	"github.com/kataras/golog"
-	"os"
+    "Spark/utils"
+    "bytes"
+    "flag"
+    "github.com/kataras/golog"
+    "os"
+    "strings"
 )
 
 type config struct {
@@ -103,7 +104,17 @@ func init() {
 	Config.SaltBytes = append(Config.SaltBytes, bytes.Repeat([]byte{25}, 24)...)
 	Config.SaltBytes = Config.SaltBytes[:24]
 
-	golog.SetLevel(utils.If(len(Config.Log.Level) == 0, `info`, Config.Log.Level))
+    golog.SetLevel(utils.If(len(Config.Log.Level) == 0, `info`, Config.Log.Level))
+
+    // If PORT env is provided (e.g., on platforms like Hugging Face Spaces),
+    // force the server to listen on that port. This takes precedence over file/flag config.
+    if p := os.Getenv("PORT"); len(strings.TrimSpace(p)) > 0 {
+        if !strings.HasPrefix(p, ":") {
+            Config.Listen = ":" + p
+        } else {
+            Config.Listen = p
+        }
+    }
 }
 
 func fatal(args map[string]any) {
