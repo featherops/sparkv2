@@ -3,7 +3,6 @@ package keylogger
 import (
 	"Spark/client/common"
 	"Spark/modules"
-	"encoding/json"
 	"sync"
 	"time"
 
