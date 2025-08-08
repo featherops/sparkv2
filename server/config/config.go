@@ -3,6 +3,7 @@ package config
 import (
     "Spark/utils"
     "bytes"
+    "encoding/hex"
     "flag"
     "github.com/kataras/golog"
     "os"
@@ -48,36 +49,57 @@ func init() {
 	flag.UintVar(&logDays, `log-days`, 7, `max days of logs, default: 7`)
 	flag.Parse()
 
-	if len(configPath) > 0 {
-		configData, err = os.ReadFile(configPath)
-		if err != nil {
-			configData, err = os.ReadFile(`Config.json`)
-			if err != nil {
-				fatal(map[string]any{
-					`event`:  `CONFIG_LOAD`,
-					`status`: `fail`,
-					`msg`:    err.Error(),
-				})
-				return
-			}
-		}
-		err = utils.JSON.Unmarshal(configData, &Config)
-		if err != nil {
-			fatal(map[string]any{
-				`event`:  `CONFIG_PARSE`,
-				`status`: `fail`,
-				`msg`:    err.Error(),
-			})
-			return
-		}
-		if Config.Log == nil {
-			Config.Log = &log{
-				Level: `info`,
-				Path:  `./logs`,
-				Days:  7,
-			}
-		}
-	} else {
+    if len(configPath) > 0 {
+        configData, err = os.ReadFile(configPath)
+        if err != nil {
+            configData, err = os.ReadFile(`Config.json`)
+            if err != nil {
+                // Generate a default configuration if no file is present.
+                defSalt := os.Getenv("SPARK_SALT")
+                if len(strings.TrimSpace(defSalt)) == 0 {
+                    defSalt = hex.EncodeToString(utils.GetUUID())
+                }
+                defUser := strings.TrimSpace(os.Getenv("SPARK_AUTH_USER"))
+                defPass := strings.TrimSpace(os.Getenv("SPARK_AUTH_PASS"))
+                auth := map[string]string{}
+                if len(defUser) > 0 && len(defPass) > 0 {
+                    auth[defUser] = defPass
+                }
+                Config = config{
+                    Listen: `:8000`,
+                    Salt:   defSalt,
+                    Auth:   auth,
+                    Log: &log{
+                        Level: `info`,
+                        Path:  `./logs`,
+                        Days:  7,
+                    },
+                }
+                // Best-effort write to config.json so users can edit later.
+                _ = os.WriteFile("config.json", []byte("{\"listen\":\":8000\",\"salt\":\""+Config.Salt+"\",\"auth\":{},\"log\":{\"level\":\"info\",\"path\":\"./logs\",\"days\":7}}"), 0644)
+            } else {
+                // Parsed from fallback Config.json
+                _ = utils.JSON.Unmarshal(configData, &Config)
+            }
+        } else {
+            err = utils.JSON.Unmarshal(configData, &Config)
+            if err != nil {
+                fatal(map[string]any{
+                    `event`:  `CONFIG_PARSE`,
+                    `status`: `fail`,
+                    `msg`:    err.Error(),
+                })
+                return
+            }
+        }
+        if Config.Log == nil {
+            Config.Log = &log{
+                Level: `info`,
+                Path:  `./logs`,
+                Days:  7,
+            }
+        }
+    } else {
 		Config = config{
 			Listen: listen,
 			Salt:   salt,
