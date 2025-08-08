@@ -114,7 +114,26 @@ func init() {
 		}
 	}
 
-	if len(Config.Salt) > 24 {
+    // Allow runtime overrides via environment variables
+    if v := strings.TrimSpace(os.Getenv("SPARK_SALT")); len(v) > 0 {
+        Config.Salt = v
+    }
+    if u := strings.TrimSpace(os.Getenv("SPARK_AUTH_USER")); len(u) > 0 {
+        if p := strings.TrimSpace(os.Getenv("SPARK_AUTH_PASS")); len(p) > 0 {
+            if Config.Auth == nil {
+                Config.Auth = map[string]string{}
+            }
+            Config.Auth[u] = p
+        }
+    }
+    if lvl := strings.TrimSpace(os.Getenv("SPARK_LOG_LEVEL")); len(lvl) > 0 {
+        if Config.Log == nil {
+            Config.Log = &log{}
+        }
+        Config.Log.Level = lvl
+    }
+
+    if len(Config.Salt) > 24 {
 		fatal(map[string]any{
 			`event`:  `CONFIG_PARSE`,
 			`status`: `fail`,
