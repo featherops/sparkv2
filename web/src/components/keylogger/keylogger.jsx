@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import '../modal.css';
+import DraggableModal from '../modal';
 
 const Keylogger = ({ device, onClose }) => {
     const [isActive, setIsActive] = useState(false);
@@ -189,14 +189,21 @@ const Keylogger = ({ device, onClose }) => {
     };
 
     return (
-        <div className="modal-backdrop">
-            <div className="modal-content" style={{ width: '800px', height: '600px' }}>
-                <div className="modal-header">
-                    <span>Keylogger - {device.hostname}</span>
-                    <button className="modal-close" onClick={onClose}>×</button>
-                </div>
-                
-                <div className="modal-body" style={{ padding: '20px', display: 'flex', flexDirection: 'column', height: 'calc(100% - 60px)' }}>
+        <DraggableModal
+            draggable={true}
+            maskClosable={false}
+            destroyOnClose={true}
+            modalTitle={`Keylogger - ${device.hostname}`}
+            footer={null}
+            height={600}
+            width={800}
+            bodyStyle={{
+                padding: 0
+            }}
+            open={!!device}
+            onCancel={onClose}
+        >
+            <div style={{ padding: '20px', display: 'flex', flexDirection: 'column', height: '560px' }}>
                     {/* Control Panel */}
                     <div style={{ marginBottom: '20px', padding: '15px', border: '1px solid #ddd', borderRadius: '5px' }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '15px' }}>
@@ -347,9 +354,8 @@ const Keylogger = ({ device, onClose }) => {
                             </div>
                         )}
                     </div>
-                </div>
             </div>
-        </div>
+        </DraggableModal>
     );
 };
 
