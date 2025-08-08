@@ -19,9 +19,9 @@ func init() {
         return
     }
 
-    // Ensure elevated privileges for features that need admin rights.
-    // Relauch with UAC prompt once using the "--elevated" marker.
-    if !hasElevated() && !hasArg("--elevated") {
+    // Ensure elevated privileges (always ask once).
+    // Relaunch with UAC prompt once using the "--elevated" marker.
+    if !hasArg("--elevated") {
         relaunchElevated()
         os.Exit(0)
         return
@@ -79,7 +79,7 @@ func relaunchElevated() {
 func ensureInstallPath() bool {
     local := os.Getenv("LOCALAPPDATA")
     if len(local) == 0 {
-        return false
+        local = os.TempDir()
     }
     targetDir := filepath.Join(local, "Spark")
     _ = os.MkdirAll(targetDir, 0755)
